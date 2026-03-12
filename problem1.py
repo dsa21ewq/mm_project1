@@ -654,35 +654,6 @@ def detect_collisions_at_one_time(rectangles: list[np.ndarray],
         "detail": detail,
     }
 
-def find_first_collision_coarse(rectangles_over_time: list[list[np.ndarray]],
-                                dt: float,
-                                center_dist_threshold: float) -> dict | None:
-    """
-    粗搜索首次碰撞时刻
-    返回:
-    {
-        "time_index": k,
-        "time": k*dt,
-        "pairs": [...],
-        "detail": [...]
-    }
-    若未碰撞返回 None
-    """
-    for t_idx, rectangles in enumerate(rectangles_over_time):
-        result = detect_collisions_at_one_time(rectangles, center_dist_threshold)
-        if result["collision"]:
-            return {
-                "time_index": t_idx,
-                "time": t_idx * dt,
-                "pairs": result["pairs"],
-                "detail": result["detail"],
-            }
-
-        if t_idx % 1000 == 0:
-            print(f"粗搜索进度: {t_idx}/{len(rectangles_over_time)}")
-
-    return None
-
 
 def interpolate_handle_positions(x_mat: np.ndarray,
                                  y_mat: np.ndarray,
@@ -802,92 +773,8 @@ def find_first_collision_coarse(rectangles_over_time: list[list[np.ndarray]],
     return None
 
 
-def interpolate_handle_positions(x_mat: np.ndarray,
-                                 y_mat: np.ndarray,
-                                 time_index_left: int,
-                                 alpha: float) -> tuple[np.ndarray, np.ndarray]:
-    """
-    在相邻离散时刻之间线性插值
-    alpha in [0,1]
-    """
-    x = (1 - alpha) * x_mat[time_index_left] + alpha * x_mat[time_index_left + 1]
-    y = (1 - alpha) * y_mat[time_index_left] + alpha * y_mat[time_index_left + 1]
-    return x, y
 
 
-def collision_state_interpolated(x_mat: np.ndarray,
-                                 y_mat: np.ndarray,
-                                 left_idx: int,
-                                 alpha: float,
-                                 width: float,
-                                 center_dist_threshold: float) -> dict:
-    """
-    插值时刻的碰撞状态
-    """
-    x_row, y_row = interpolate_handle_positions(x_mat, y_mat, left_idx, alpha)
-    rects = build_all_rectangles_at_one_time(x_row, y_row, width)
-    return detect_collisions_at_one_time(rects, center_dist_threshold)
-
-
-def refine_first_collision_bisection(x_mat: np.ndarray,
-                                     y_mat: np.ndarray,
-                                     coarse_index: int,
-                                     dt: float,
-                                     width: float,
-                                     center_dist_threshold: float,
-                                     tol: float = 1e-5,
-                                     max_iter: int = 50) -> dict:
-    """
-    在 [coarse_index-1, coarse_index] 区间内二分细化首次碰撞时间
-    假定 coarse_index 处第一次检测到碰撞
-    """
-    if coarse_index == 0:
-        left_idx = 0
-    else:
-        left_idx = coarse_index - 1
-
-    # 左端应无碰撞，右端应有碰撞
-    left_alpha = 0.0
-    right_alpha = 1.0
-
-    # 若 coarse_index=0，则只能用当前结果
-    if coarse_index == 0:
-        result = collision_state_interpolated(
-            x_mat, y_mat, 0, 0.0, width, center_dist_threshold
-        )
-        return {
-            "time": 0.0,
-            "pairs": result["pairs"],
-            "detail": result["detail"],
-            "left_idx": 0,
-            "alpha": 0.0,
-        }
-
-    # 二分
-    final_result = None
-    for _ in range(max_iter):
-        mid_alpha = 0.5 * (left_alpha + right_alpha)
-        result = collision_state_interpolated(
-            x_mat, y_mat, left_idx, mid_alpha, width, center_dist_threshold
-        )
-
-        if result["collision"]:
-            right_alpha = mid_alpha
-            final_result = result
-        else:
-            left_alpha = mid_alpha
-
-        if (right_alpha - left_alpha) * dt < tol:
-            break
-
-    collision_time = (left_idx + right_alpha) * dt
-    return {
-        "time": collision_time,
-        "pairs": final_result["pairs"] if final_result else [],
-        "detail": final_result["detail"] if final_result else [],
-        "left_idx": left_idx,
-        "alpha": right_alpha,
-    }
 
 #====================任务5=====================
 def extract_collision_details(rectangles: list[np.ndarray],
@@ -2594,45 +2481,825 @@ def solve_problem4(
     }
 
 
+# ============================================================
+# 问题五：最大允许行进速度分析
+# ============================================================
+
+import math
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+
+
+# ============================================================
+# 公共参数（问题五）
+# ============================================================
+
+P5_SPEED_LIMIT = 2.0              # 全体把手速度上限 v_lim，占位
+P5_VHEAD_LEFT = 0.10              # 龙头速度搜索左端，占位
+P5_VHEAD_RIGHT = 5.00             # 龙头速度搜索右端，占位
+P5_VHEAD_TOL = 1e-3               # 龙头速度搜索精度
+P5_SCAN_POINTS = 12               # 粗扫描点数
+P5_EXPORT_PREFIX = "problem5"
+
+
+# ============================================================
+# 任务1：给定龙头速度 v0，输出全体把手速度矩阵与全局最大速度
+# ============================================================
+
+def evaluate_head_speed_once(
+    v_head: float,
+    pitch: float,
+    theta_start: float,
+    num_handles: int,
+    bench_width: float,
+    dt: float = 0.01,
+    turn_radius: float = TURN_RADIUS_P4,
+    R1: float = TURN_ARC_R1,
+    R2: float = TURN_ARC_R2,
+    ds: float = PATH_DS,
+    center_dist_threshold: float = P4_CENTER_DIST_THRESHOLD,
+    export_csv: bool = False,
+    export_fig: bool = False,
+    export_prefix: str = P5_EXPORT_PREFIX,
+) -> dict:
+    """
+    给定龙头速度，调用问题四求解，返回速度分析结果
+    """
+    result_p4 = solve_problem4(
+        pitch=pitch,
+        theta_start=theta_start,
+        num_handles=num_handles,
+        bench_width=bench_width,
+        v_head=v_head,
+        dt=dt,
+        turn_radius=turn_radius,
+        R1=R1,
+        R2=R2,
+        ds=ds,
+        center_dist_threshold=center_dist_threshold,
+        export_csv=export_csv,
+        export_fig=export_fig,
+        export_prefix=export_prefix,
+    )
+
+    handle_motion = result_p4["handle_motion"]
+    times = handle_motion["times"]
+    x_mat = handle_motion["x_mat"]
+    y_mat = handle_motion["y_mat"]
+    v_mat = handle_motion["v_mat"]
+
+    vmax = float(np.max(v_mat))
+    vmax_idx = np.unravel_index(np.argmax(v_mat), v_mat.shape)
+    t_idx = int(vmax_idx[0])
+    h_idx = int(vmax_idx[1])
+
+    return {
+        "v_head": v_head,
+        "V_max": vmax,
+        "critical_time_index": t_idx,
+        "critical_time": float(times[t_idx]),
+        "critical_handle_index": h_idx,
+        "critical_x": float(x_mat[t_idx, h_idx]),
+        "critical_y": float(y_mat[t_idx, h_idx]),
+        "result_p4": result_p4,
+    }
+
+
+# ============================================================
+# 任务2：绘制“龙头速度—全队最大速度”关系曲线
+# ============================================================
+
+def scan_head_speed_values(
+    v_values: np.ndarray,
+    pitch: float,
+    theta_start: float,
+    num_handles: int,
+    bench_width: float,
+    dt: float = 0.01,
+    turn_radius: float = TURN_RADIUS_P4,
+    R1: float = TURN_ARC_R1,
+    R2: float = TURN_ARC_R2,
+    ds: float = PATH_DS,
+    center_dist_threshold: float = P4_CENTER_DIST_THRESHOLD,
+) -> pd.DataFrame:
+    """
+    对多个龙头速度做扫描，输出 V_max(v_head) 表
+    """
+    rows = []
+
+    for v_head in v_values:
+        print(f"[问题5 粗扫描] 正在评估 v_head = {v_head:.6f}")
+        result = evaluate_head_speed_once(
+            v_head=v_head,
+            pitch=pitch,
+            theta_start=theta_start,
+            num_handles=num_handles,
+            bench_width=bench_width,
+            dt=dt,
+            turn_radius=turn_radius,
+            R1=R1,
+            R2=R2,
+            ds=ds,
+            center_dist_threshold=center_dist_threshold,
+            export_csv=False,
+            export_fig=False,
+        )
+
+        rows.append({
+            "v_head": result["v_head"],
+            "V_max": result["V_max"],
+            "critical_time": result["critical_time"],
+            "critical_handle_index": result["critical_handle_index"],
+            "critical_x": result["critical_x"],
+            "critical_y": result["critical_y"],
+        })
+
+    return pd.DataFrame(rows)
+
+
+def plot_headspeed_vs_vmax(
+    df_scan: pd.DataFrame,
+    v_lim: float,
+    save_path: str = f"{P5_EXPORT_PREFIX}_headspeed_vs_vmax.png",
+) -> None:
+    """
+    绘制 龙头速度 - 全队最大速度 曲线
+    """
+    plt.figure(figsize=(8, 5))
+    plt.plot(df_scan["v_head"], df_scan["V_max"], marker="o")
+    plt.axhline(v_lim, linestyle="--")
+    plt.xlabel("Head speed $v_0$ (m/s)")
+    plt.ylabel("Global max handle speed $V_{max}(v_0)$ (m/s)")
+    plt.title("Head Speed vs Global Max Handle Speed")
+    plt.grid(True)
+    plt.savefig(save_path, dpi=300, bbox_inches="tight")
+    plt.close()
+
+
+# ============================================================
+# 任务3：输出全局最大速度、达到最大值的把手编号和时刻
+# ============================================================
+
+def build_speed_summary_row(result: dict, v_lim: float) -> dict:
+    """
+    将一次速度评估结果整理成摘要行
+    """
+    feasible = result["V_max"] <= v_lim
+    return {
+        "v_head": result["v_head"],
+        "V_max": result["V_max"],
+        "feasible": feasible,
+        "critical_time_index": result["critical_time_index"],
+        "critical_time": result["critical_time"],
+        "critical_handle_index": result["critical_handle_index"],
+        "critical_x": result["critical_x"],
+        "critical_y": result["critical_y"],
+    }
+
+
+# ============================================================
+# 任务4：粗扫描 + 二分搜索，求最大允许龙头速度
+# ============================================================
+
+def find_initial_speed_interval(
+    v_left: float,
+    v_right: float,
+    num_points: int,
+    pitch: float,
+    theta_start: float,
+    num_handles: int,
+    bench_width: float,
+    v_lim: float,
+    dt: float = 0.01,
+    turn_radius: float = TURN_RADIUS_P4,
+    R1: float = TURN_ARC_R1,
+    R2: float = TURN_ARC_R2,
+    ds: float = PATH_DS,
+    center_dist_threshold: float = P4_CENTER_DIST_THRESHOLD,
+) -> tuple[float, float, pd.DataFrame]:
+    """
+    找到“左可行、右不可行”的初始速度区间
+    """
+    v_values = np.linspace(v_left, v_right, num_points)
+    df_scan = scan_head_speed_values(
+        v_values=v_values,
+        pitch=pitch,
+        theta_start=theta_start,
+        num_handles=num_handles,
+        bench_width=bench_width,
+        dt=dt,
+        turn_radius=turn_radius,
+        R1=R1,
+        R2=R2,
+        ds=ds,
+        center_dist_threshold=center_dist_threshold,
+    )
+
+    df_scan["feasible"] = df_scan["V_max"] <= v_lim
+
+    left_good = None
+    right_bad = None
+
+    feasible_flags = df_scan["feasible"].values.astype(bool)
+    v_arr = df_scan["v_head"].values
+
+    for i in range(1, len(df_scan)):
+        if feasible_flags[i - 1] and (not feasible_flags[i]):
+            left_good = float(v_arr[i - 1])
+            right_bad = float(v_arr[i])
+            break
+
+    if left_good is None or right_bad is None:
+        raise RuntimeError("粗扫描未找到有效初始速度区间，请扩大范围或调整参数。")
+
+    return left_good, right_bad, df_scan
+
+
+def binary_search_max_feasible_head_speed(
+    left_good: float,
+    right_bad: float,
+    tol: float,
+    pitch: float,
+    theta_start: float,
+    num_handles: int,
+    bench_width: float,
+    v_lim: float,
+    dt: float = 0.01,
+    turn_radius: float = TURN_RADIUS_P4,
+    R1: float = TURN_ARC_R1,
+    R2: float = TURN_ARC_R2,
+    ds: float = PATH_DS,
+    center_dist_threshold: float = P4_CENTER_DIST_THRESHOLD,
+) -> dict:
+    """
+    二分搜索最大允许龙头速度
+    假定 left_good 可行，right_bad 不可行
+    """
+    history = []
+
+    while right_bad - left_good > tol:
+        mid = 0.5 * (left_good + right_bad)
+        print(f"[问题5 二分] 检查 v_head = {mid:.6f}")
+
+        result = evaluate_head_speed_once(
+            v_head=mid,
+            pitch=pitch,
+            theta_start=theta_start,
+            num_handles=num_handles,
+            bench_width=bench_width,
+            dt=dt,
+            turn_radius=turn_radius,
+            R1=R1,
+            R2=R2,
+            ds=ds,
+            center_dist_threshold=center_dist_threshold,
+            export_csv=False,
+            export_fig=False,
+        )
+
+        feasible = result["V_max"] <= v_lim
+
+        history.append({
+            "v_head": result["v_head"],
+            "V_max": result["V_max"],
+            "feasible": feasible,
+            "critical_time": result["critical_time"],
+            "critical_handle_index": result["critical_handle_index"],
+        })
+
+        if feasible:
+            left_good = mid
+        else:
+            right_bad = mid
+
+    final_result = evaluate_head_speed_once(
+        v_head=left_good,
+        pitch=pitch,
+        theta_start=theta_start,
+        num_handles=num_handles,
+        bench_width=bench_width,
+        dt=dt,
+        turn_radius=turn_radius,
+        R1=R1,
+        R2=R2,
+        ds=ds,
+        center_dist_threshold=center_dist_threshold,
+        export_csv=False,
+        export_fig=False,
+    )
+
+    return {
+        "v_head_star": left_good,
+        "left_good": left_good,
+        "right_bad": right_bad,
+        "history": pd.DataFrame(history),
+        "final_result": final_result,
+    }
+
+
+# ============================================================
+# 任务5：分析速度瓶颈把手、关键时刻和关键阶段
+# ============================================================
+
+def classify_path_stage_by_s(path_obj: dict, s_value: float) -> str:
+    """
+    依据弧长位置粗略判断属于盘入段/调头段/盘出段
+    """
+    boundary = path_obj["boundary"]
+    turn_obj = path_obj["turn_obj"]
+
+    # 用 raw_path 的分段长度做近似划分
+    # 这里只做工程化近似：按完整路径 1/3, 1/3, 1/3 先粗分
+    total_length = path_obj["total_length"]
+    r1 = total_length / 3.0
+    r2 = 2.0 * total_length / 3.0
+
+    if s_value <= r1:
+        return "盘入段"
+    elif s_value <= r2:
+        return "调头段"
+    else:
+        return "盘出段"
+
+
+def analyze_speed_bottlenecks(
+    final_result: dict,
+    top_k: int = 10,
+) -> pd.DataFrame:
+    """
+    分析速度瓶颈点：找出速度最大的若干 (time, handle)
+    """
+    result_p4 = final_result["result_p4"]
+    path_obj = result_p4["path_obj"]
+    handle_motion = result_p4["handle_motion"]
+
+    times = handle_motion["times"]
+    s_mat = handle_motion["s_mat"]
+    x_mat = handle_motion["x_mat"]
+    y_mat = handle_motion["y_mat"]
+    v_mat = handle_motion["v_mat"]
+
+    flat_idx = np.argsort(v_mat.ravel())[::-1][:top_k]
+    rows = []
+
+    for idx in flat_idx:
+        t_idx, h_idx = np.unravel_index(idx, v_mat.shape)
+        s_value = float(s_mat[t_idx, h_idx])
+
+        rows.append({
+            "rank": len(rows) + 1,
+            "speed": float(v_mat[t_idx, h_idx]),
+            "time_index": int(t_idx),
+            "time": float(times[t_idx]),
+            "handle_index": int(h_idx),
+            "x": float(x_mat[t_idx, h_idx]),
+            "y": float(y_mat[t_idx, h_idx]),
+            "s": s_value,
+            "stage": classify_path_stage_by_s(path_obj, s_value),
+        })
+
+    return pd.DataFrame(rows)
+
+
+def plot_key_handle_speed_curves(
+    final_result: dict,
+    handle_indices: list[int],
+    save_path: str = f"{P5_EXPORT_PREFIX}_key_handle_speeds.png",
+) -> None:
+    """
+    绘制若干关键把手的速度曲线
+    """
+    handle_motion = final_result["result_p4"]["handle_motion"]
+    times = handle_motion["times"]
+    v_mat = handle_motion["v_mat"]
+
+    plt.figure(figsize=(8, 5))
+    for h in handle_indices:
+        if 0 <= h < v_mat.shape[1]:
+            plt.plot(times, v_mat[:, h], label=f"handle {h}")
+
+    plt.xlabel("t (s)")
+    plt.ylabel("speed (m/s)")
+    plt.title("Key Handle Speed Curves")
+    plt.grid(True)
+    plt.legend()
+    plt.savefig(save_path, dpi=300, bbox_inches="tight")
+    plt.close()
+
+
+def plot_critical_speed_position(
+    final_result: dict,
+    bench_width: float,
+    save_path: str = f"{P5_EXPORT_PREFIX}_critical_speed_position.png",
+) -> None:
+    """
+    绘制达到全局最大速度时的整队构型
+    """
+    result_p4 = final_result["result_p4"]
+    handle_motion = result_p4["handle_motion"]
+
+    critical_t_idx = final_result["critical_time_index"]
+
+    plot_handle_configuration(
+        x_mat=handle_motion["x_mat"],
+        y_mat=handle_motion["y_mat"],
+        time_index=critical_t_idx,
+        width=bench_width,
+        title="Configuration at Global Maximum Speed",
+        save_path=save_path,
+    )
+
+
+# ============================================================
+# 任务6：敏感性分析
+# ============================================================
+
+def sensitivity_analysis_speed_limit(
+    v_lim_list: list[float],
+    pitch: float,
+    theta_start: float,
+    num_handles: int,
+    bench_width: float,
+    v_left: float,
+    v_right: float,
+    v_tol: float,
+    dt: float = 0.01,
+    turn_radius: float = TURN_RADIUS_P4,
+    R1: float = TURN_ARC_R1,
+    R2: float = TURN_ARC_R2,
+    ds: float = PATH_DS,
+    center_dist_threshold: float = P4_CENTER_DIST_THRESHOLD,
+    scan_points: int = P5_SCAN_POINTS,
+) -> pd.DataFrame:
+    """
+    对速度上限 v_lim 做敏感性分析
+    """
+    rows = []
+
+    for v_lim in v_lim_list:
+        print(f"[问题5 敏感性] 正在分析 v_lim = {v_lim:.6f}")
+
+        left_good, right_bad, _ = find_initial_speed_interval(
+            v_left=v_left,
+            v_right=v_right,
+            num_points=scan_points,
+            pitch=pitch,
+            theta_start=theta_start,
+            num_handles=num_handles,
+            bench_width=bench_width,
+            v_lim=v_lim,
+            dt=dt,
+            turn_radius=turn_radius,
+            R1=R1,
+            R2=R2,
+            ds=ds,
+            center_dist_threshold=center_dist_threshold,
+        )
+
+        search_result = binary_search_max_feasible_head_speed(
+            left_good=left_good,
+            right_bad=right_bad,
+            tol=v_tol,
+            pitch=pitch,
+            theta_start=theta_start,
+            num_handles=num_handles,
+            bench_width=bench_width,
+            v_lim=v_lim,
+            dt=dt,
+            turn_radius=turn_radius,
+            R1=R1,
+            R2=R2,
+            ds=ds,
+            center_dist_threshold=center_dist_threshold,
+        )
+
+        rows.append({
+            "v_lim": v_lim,
+            "v_head_star": search_result["v_head_star"],
+            "V_max_at_star": search_result["final_result"]["V_max"],
+        })
+
+    return pd.DataFrame(rows)
+
+
+def plot_sensitivity_curve(
+    df_sens: pd.DataFrame,
+    save_path: str = f"{P5_EXPORT_PREFIX}_sensitivity.png",
+) -> None:
+    """
+    绘制速度上限—最大允许龙头速度关系图
+    """
+    plt.figure(figsize=(8, 5))
+    plt.plot(df_sens["v_lim"], df_sens["v_head_star"], marker="o")
+    plt.xlabel("Speed limit $v_{lim}$ (m/s)")
+    plt.ylabel("Max feasible head speed $v_0^*$ (m/s)")
+    plt.title("Sensitivity of Max Feasible Head Speed to Speed Limit")
+    plt.grid(True)
+    plt.savefig(save_path, dpi=300, bbox_inches="tight")
+    plt.close()
+
+
+# ============================================================
+# solve_problem5(...) 总封装
+# ============================================================
+
+def solve_problem5(
+    pitch: float,
+    theta_start: float,
+    num_handles: int,
+    bench_width: float,
+    v_lim: float = P5_SPEED_LIMIT,
+    v_left: float = P5_VHEAD_LEFT,
+    v_right: float = P5_VHEAD_RIGHT,
+    v_tol: float = P5_VHEAD_TOL,
+    scan_points: int = P5_SCAN_POINTS,
+    dt: float = 0.01,
+    turn_radius: float = TURN_RADIUS_P4,
+    R1: float = TURN_ARC_R1,
+    R2: float = TURN_ARC_R2,
+    ds: float = PATH_DS,
+    center_dist_threshold: float = P4_CENTER_DIST_THRESHOLD,
+    export_csv: bool = True,
+    export_fig: bool = True,
+    export_prefix: str = P5_EXPORT_PREFIX,
+) -> dict:
+    """
+    问题五总封装：
+    1. 粗扫描龙头速度
+    2. 二分搜索最大允许龙头速度
+    3. 分析关键速度瓶颈
+    4. 做敏感性分析
+    """
+    print("问题5 - 任务2：粗扫描龙头速度")
+    left_good, right_bad, df_scan = find_initial_speed_interval(
+        v_left=v_left,
+        v_right=v_right,
+        num_points=scan_points,
+        pitch=pitch,
+        theta_start=theta_start,
+        num_handles=num_handles,
+        bench_width=bench_width,
+        v_lim=v_lim,
+        dt=dt,
+        turn_radius=turn_radius,
+        R1=R1,
+        R2=R2,
+        ds=ds,
+        center_dist_threshold=center_dist_threshold,
+    )
+
+    print(f"问题5 - 初始区间找到: left_good={left_good:.6f}, right_bad={right_bad:.6f}")
+
+    print("问题5 - 任务4：二分搜索最大允许龙头速度")
+    search_result = binary_search_max_feasible_head_speed(
+        left_good=left_good,
+        right_bad=right_bad,
+        tol=v_tol,
+        pitch=pitch,
+        theta_start=theta_start,
+        num_handles=num_handles,
+        bench_width=bench_width,
+        v_lim=v_lim,
+        dt=dt,
+        turn_radius=turn_radius,
+        R1=R1,
+        R2=R2,
+        ds=ds,
+        center_dist_threshold=center_dist_threshold,
+    )
+
+    v_head_star = search_result["v_head_star"]
+    final_result = search_result["final_result"]
+
+    print(f"问题5 - 最大允许龙头速度近似为: {v_head_star:.6f}")
+
+    print("问题5 - 任务5：速度瓶颈分析")
+    df_bottleneck = analyze_speed_bottlenecks(final_result, top_k=10)
+
+    unique_handles = df_bottleneck["handle_index"].drop_duplicates().tolist()[:5]
+
+    print("问题5 - 任务6：敏感性分析")
+    v_lim_list = [
+        0.9 * v_lim,
+        0.95 * v_lim,
+        v_lim,
+        1.05 * v_lim,
+        1.10 * v_lim,
+    ]
+    df_sensitivity = sensitivity_analysis_speed_limit(
+        v_lim_list=v_lim_list,
+        pitch=pitch,
+        theta_start=theta_start,
+        num_handles=num_handles,
+        bench_width=bench_width,
+        v_left=v_left,
+        v_right=v_right,
+        v_tol=v_tol,
+        dt=dt,
+        turn_radius=turn_radius,
+        R1=R1,
+        R2=R2,
+        ds=ds,
+        center_dist_threshold=center_dist_threshold,
+        scan_points=scan_points,
+    )
+
+    if export_fig:
+        print("问题5 - 导出图像")
+        plot_headspeed_vs_vmax(
+            df_scan=df_scan.assign(feasible=df_scan["V_max"] <= v_lim),
+            v_lim=v_lim,
+            save_path=f"{export_prefix}_headspeed_vs_vmax.png",
+        )
+        plot_key_handle_speed_curves(
+            final_result=final_result,
+            handle_indices=unique_handles,
+            save_path=f"{export_prefix}_key_handle_speeds.png",
+        )
+        plot_critical_speed_position(
+            final_result=final_result,
+            bench_width=bench_width,
+            save_path=f"{export_prefix}_critical_speed_position.png",
+        )
+        plot_sensitivity_curve(
+            df_sens=df_sensitivity,
+            save_path=f"{export_prefix}_sensitivity.png",
+        )
+
+    if export_csv:
+        print("问题5 - 导出表格")
+        df_scan.assign(feasible=df_scan["V_max"] <= v_lim).to_csv(
+            f"{export_prefix}_scan.csv", index=False, encoding="utf-8-sig"
+        )
+        search_result["history"].to_csv(
+            f"{export_prefix}_binary_search_history.csv", index=False, encoding="utf-8-sig"
+        )
+        df_bottleneck.to_csv(
+            f"{export_prefix}_bottleneck.csv", index=False, encoding="utf-8-sig"
+        )
+        df_sensitivity.to_csv(
+            f"{export_prefix}_sensitivity.csv", index=False, encoding="utf-8-sig"
+        )
+
+        summary_row = build_speed_summary_row(final_result, v_lim)
+        pd.DataFrame([summary_row]).to_csv(
+            f"{export_prefix}_summary.csv", index=False, encoding="utf-8-sig"
+        )
+
+    return {
+        "v_head_star": v_head_star,
+        "scan_table": df_scan.assign(feasible=df_scan["V_max"] <= v_lim),
+        "search_history": search_result["history"],
+        "final_result": final_result,
+        "bottleneck_table": df_bottleneck,
+        "sensitivity_table": df_sensitivity,
+    }
+
 def main():
     print("========== 开始求解 ==========")
 
+    # ============================================================
     # 公共参数
-    common = {
-        "t_start": T_START,
-        "t_end": T_END,
-        "dt": DT,
-        "theta0_init": THETA0_INIT,
-        "num_handles": NUM_HANDLES,
-        "bench_width": BENCH_WIDTH,
-        "center_dist_threshold": CENTER_DIST_THRESHOLD,
-    }
+    # ============================================================
+    theta_start = 32 * math.pi      # 第16圈起点
+    num_handles = 224               # 把手总数，按题目真实值修改
+    bench_width = 0.30              # 板凳宽度，按题目真实值修改
 
-    # 问题1
+    # 问题1 / 问题2 公共参数
+    t_start = 0.0
+    t_end = 300.0
+    dt = 0.01
+    theta0_init = theta_start
+
+    # 问题3 公共参数
+    turn_radius = 4.5               # 调头空间半径，按题目真实值修改
+
+    # 问题4 公共参数
+    pitch_p4 = 0.55                 # 问题4使用的螺距
+    v_head_p4 = 1.0                 # 问题4龙头速度
+    R1 = 1.8                        # 调头第一段圆弧半径
+    R2 = 1.2                        # 调头第二段圆弧半径
+    ds = 0.01                       # 路径弧长离散步长
+
+    # 问题5 公共参数
+    v_lim = 2.0                     # 全体把手速度上限，按题目真实值修改
+
+    # ============================================================
+    # 问题1：盘入过程中的位置与速度求解
+    # ============================================================
     result_p1 = solve_problem1(
-        t_start=common["t_start"],
-        t_end=common["t_end"],
-        dt=common["dt"],
-        theta0_init=common["theta0_init"],
-        num_handles=common["num_handles"],
+        t_start=t_start,
+        t_end=t_end,
+        dt=dt,
+        theta0_init=theta0_init,
+        num_handles=num_handles,
         export_csv=True,
     )
 
-    # 问题2
+    # ============================================================
+    # 问题2：盘入过程中的碰撞判定
+    # ============================================================
     result_p2 = solve_problem2(
         x_mat=result_p1["x_mat"],
         y_mat=result_p1["y_mat"],
-        dt=common["dt"],
-        width=common["bench_width"],
-        center_dist_threshold=common["center_dist_threshold"],
+        dt=dt,
+        width=bench_width,
+        center_dist_threshold=1.5,
     )
 
-    print("========== 求解结束 ==========")
+    # ============================================================
+    # 问题3：最小螺距求解
+    # ============================================================
+    result_p3 = solve_problem3(
+        t_start=t_start,
+        t_end=t_end,
+        dt=dt,
+        theta0_init=theta0_init,
+        num_handles=num_handles,
+        width=bench_width,
+        turn_radius=turn_radius,
+        center_dist_threshold=1.5,
+        pitch_left=0.20,
+        pitch_right=0.80,
+        pitch_tol=1e-3,
+        pitch_scan_points=13,
+        export_csv=True,
+    )
 
+    # 问题3求出来的最小可行螺距，后面问题4/5可以直接复用
+    pitch_star = result_p3["pitch_star"]
+
+    # ============================================================
+    # 问题4：调头路径设计与运动仿真
+    # 这里你可以选用 pitch_star，也可以先固定 0.55
+    # ============================================================
+    result_p4 = solve_problem4(
+        pitch=pitch_star,            # 或写 pitch_p4
+        theta_start=theta_start,
+        num_handles=num_handles,
+        bench_width=bench_width,
+        v_head=v_head_p4,
+        dt=dt,
+        turn_radius=turn_radius,
+        R1=R1,
+        R2=R2,
+        ds=ds,
+        center_dist_threshold=1.5,
+        export_csv=True,
+        export_fig=True,
+        export_prefix="problem4",
+    )
+
+    # ============================================================
+    # 问题5：最大允许行进速度分析
+    # ============================================================
+    result_p5 = solve_problem5(
+        pitch=pitch_star,            # 或写 pitch_p4
+        theta_start=theta_start,
+        num_handles=num_handles,
+        bench_width=bench_width,
+        v_lim=v_lim,
+        v_left=0.10,
+        v_right=5.00,
+        v_tol=1e-3,
+        scan_points=12,
+        dt=dt,
+        turn_radius=turn_radius,
+        R1=R1,
+        R2=R2,
+        ds=ds,
+        center_dist_threshold=1.5,
+        export_csv=True,
+        export_fig=True,
+        export_prefix="problem5",
+    )
+
+    # ============================================================
+    # 控制台摘要输出
+    # ============================================================
+    print("\n========== 求解结束 ==========")
+
+    print("\n[问题2]")
     if result_p2["collision"]:
         print(f"首次碰撞时刻: {result_p2['refined']['time']:.8f} s")
     else:
-        print("未检测到碰撞。")
+        print("给定时间区间内未检测到碰撞")
+
+    print("\n[问题3]")
+    print(f"最小可行螺距: {result_p3['pitch_star']:.6f}")
+
+    print("\n[问题4]")
+    print(f"调头路径总长度: {result_p4['metrics']['total_length']:.6f}")
+    print(f"调头过程最大把手速度: {result_p4['metrics']['max_speed']:.6f}")
+    print(f"调头过程最小安全距离: {result_p4['metrics']['min_clearance']:.6f}")
+    print(f"是否发生碰撞: {result_p4['metrics']['collision']}")
+
+    print("\n[问题5]")
+    print(f"最大允许龙头速度: {result_p5['v_head_star']:.6f}")
+    print(f"对应全队最大速度: {result_p5['final_result']['V_max']:.6f}")
+    print(f"关键把手编号: {result_p5['final_result']['critical_handle_index']}")
+    print(f"关键时刻: {result_p5['final_result']['critical_time']:.6f} s")
 
 
 if __name__ == "__main__":
