@@ -1,0 +1,122 @@
+PS C:\Users\27947\Desktop\mm_project1-main> & C:/Users/27947/AppData/Local/Programs/Python/Python313/python.exe c:/Users/27947/Desktop/mm_project1-main/mm_project1-main/project1/project_refactor_improved.py
+
+============ 问题1 ============
+问题1 - 任务1：求龙头前把手轨迹
+问题1 - 任务2：递推全部把手极角
+theta递推进度: 0/30001
+theta递推进度: 1000/30001
+theta递推进度: 2000/30001
+theta递推进度: 3000/30001
+theta递推进度: 4000/30001
+theta递推进度: 5000/30001
+theta递推进度: 6000/30001
+theta递推进度: 7000/30001
+theta递推进度: 8000/30001
+theta递推进度: 9000/30001
+theta递推进度: 10000/30001
+theta递推进度: 11000/30001
+theta递推进度: 12000/30001
+theta递推进度: 13000/30001
+theta递推进度: 14000/30001
+theta递推进度: 15000/30001
+theta递推进度: 16000/30001
+theta递推进度: 17000/30001
+theta递推进度: 18000/30001
+theta递推进度: 19000/30001
+theta递推进度: 20000/30001
+theta递推进度: 21000/30001
+theta递推进度: 22000/30001
+theta递推进度: 23000/30001
+theta递推进度: 24000/30001
+theta递推进度: 25000/30001
+theta递推进度: 26000/30001
+theta递推进度: 27000/30001
+theta递推进度: 28000/30001
+theta递推进度: 29000/30001
+theta递推进度: 30000/30001
+问题1 - 任务3：转成直角坐标并提取整数秒位置
+问题1 - 任务4：计算速度并提取整数秒结果
+问题1结果已导出：
+ - task1_head_trajectory_full.csv
+ - task3_positions_1s.csv
+ - task4_velocities_1s.csv
+ - problem1_result_1s.csv
+
+============ 问题2（流式碰撞检测） ============
+问题2 流式进度: 0/30001
+问题2 流式进度: 1000/30001
+问题2 流式进度: 2000/30001
+问题2 流式进度: 3000/30001
+问题2 流式进度: 4000/30001
+问题2 流式进度: 5000/30001
+问题2 流式进度: 6000/30001
+问题2 流式进度: 7000/30001
+问题2 流式进度: 8000/30001
+问题2 流式进度: 9000/30001
+问题2 流式进度: 10000/30001
+问题2 流式进度: 11000/30001
+问题2 流式进度: 12000/30001
+问题2 流式进度: 13000/30001
+问题2 流式进度: 14000/30001
+问题2 流式进度: 15000/30001
+问题2 流式进度: 16000/30001
+问题2 流式进度: 17000/30001
+问题2 流式进度: 18000/30001
+问题2 流式进度: 19000/30001
+问题2 流式进度: 20000/30001
+问题2 流式进度: 21000/30001
+问题2 流式进度: 22000/30001
+问题2 流式进度: 23000/30001
+问题2 流式进度: 24000/30001
+问题2 流式进度: 25000/30001
+问题2 流式进度: 26000/30001
+问题2 流式进度: 27000/30001
+问题2 流式进度: 28000/30001
+问题2 流式进度: 29000/30001
+问题2 流式进度: 30000/30001
+问题2：在给定时间区间内未检测到碰撞。
+
+============ 问题3（粗到细搜索） ============
+问题3 粗扫描 pitch=0.200000, dt=0.05
+问题3 粗扫描 pitch=0.250000, dt=0.05
+问题3 粗扫描 pitch=0.300000, dt=0.05
+问题3 粗扫描 pitch=0.350000, dt=0.05
+问题3 粗扫描 pitch=0.400000, dt=0.05
+问题3 粗扫描 pitch=0.450000, dt=0.05
+问题3 粗扫描 pitch=0.500000, dt=0.05
+问题3 粗扫描 pitch=0.550000, dt=0.05
+问题3 粗扫描 pitch=0.600000, dt=0.05
+问题3 粗扫描 pitch=0.650000, dt=0.05
+问题3 粗扫描 pitch=0.700000, dt=0.05
+问题3 粗扫描 pitch=0.750000, dt=0.05
+问题3 粗扫描 pitch=0.800000, dt=0.05
+问题3 初始区间: left_bad=0.350000, right_good=0.400000
+问题3 二分 pitch=0.375000, feasible=True, D_min=0.009583542915274123
+问题3 二分 pitch=0.362500, feasible=False, D_min=0.0
+问题3 二分 pitch=0.368750, feasible=True, D_min=0.003289743136746144
+问题3 二分 pitch=0.365625, feasible=True, D_min=0.00014280878051325312
+问题3 二分 pitch=0.364063, feasible=False, D_min=0.0
+问题3 二分 pitch=0.364844, feasible=False, D_min=0.0
+问题3 精验 pitch=0.363625, dt=0.01
+问题3 精验 pitch=0.364625, dt=0.01
+问题3 精验 pitch=0.365625, dt=0.01
+问题3 精验 pitch=0.366625, dt=0.01
+问题3 精验 pitch=0.367625, dt=0.01
+
+============ 问题4 基础解（弧长域） ============
+Traceback (most recent call last):
+  File "c:\Users\27947\Desktop\mm_project1-main\mm_project1-main\project1\project_refactor_improved.py", line 1503, in <module>
+    main()
+    ~~~~^^
+  File "c:\Users\27947\Desktop\mm_project1-main\mm_project1-main\project1\project_refactor_improved.py", line 1498, in main
+    results = run_pipeline(cfg, stage=args.stage)
+  File "c:\Users\27947\Desktop\mm_project1-main\mm_project1-main\project1\project_refactor_improved.py", line 1407, in run_pipeline        
+    base_p4 = solve_problem4_base(cfg, pitch_for_turn)
+  File "c:\Users\27947\Desktop\mm_project1-main\mm_project1-main\project1\project_refactor_improved.py", line 1039, in solve_problem4_base 
+    head_motion_s = build_head_motion_by_arclength(path_obj, cfg.ds_sample, cfg.num_handles)
+  File "c:\Users\27947\Desktop\mm_project1-main\mm_project1-main\project1\project_refactor_improved.py", line 1005, in build_head_motion_by_arclength
+    raise ValueError(
+    ...<2 lines>...
+    )
+ValueError: 复合路径长度 252.494138 小于整龙展开所需长度 369.160000，请增大路径或减少把手数。
+PS C:\Users\27947\Desktop\mm_project1-main> & C:/Users/27947/AppData/Local/Programs/Python/Python313/python.exe c:/Users/27947/Desktop/mm_project1-main/mm_project1-main/project1/project_refactor_improved.py
