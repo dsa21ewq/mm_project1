@@ -2078,6 +2078,47 @@ def build_head_motion_on_path(path_points: np.ndarray,
     }
 
 
+def build_head_motion_on_turn_window(path_obj: dict,
+                                     v_head: float,
+                                     dt: float,
+                                     num_handles: int,
+                                     margin: float = 2.0) -> dict:
+    """
+    只在调头段附近生成龙头轨迹，避免把问题4错误地扩展到整条路径后半段。
+    对当前参数，整龙链长通常大于“盘入+调头”长度，因此这里采用局部调头窗口近似，
+    不再要求整龙先完全铺到路径上再开始取样。
+    """
+    total_length = float(path_obj["total_length"])
+    if total_length <= 0.0:
+        raise ValueError("复合路径长度必须为正。")
+
+    s_turn_start = float(path_obj["s_stage_in_end"])
+    s_turn_end = float(path_obj["s_stage_turn_end"])
+    s0 = max(0.0, s_turn_start - margin)
+    s1 = min(total_length, s_turn_end + margin)
+
+    if s1 <= s0:
+        raise ValueError(
+            f"调头窗口非法: start={s0:.6f}, end={s1:.6f}。请检查路径长度或 margin 设置。"
+        )
+
+    times = np.arange(0.0, (s1 - s0) / v_head + dt, dt)
+    s_head = np.clip(s0 + v_head * times, s0, s1)
+    if s_head[-1] < s1:
+        s_head = np.append(s_head, s1)
+        times = np.append(times, (s1 - s0) / v_head)
+
+    head_xy = path_positions_batch(path_obj["path_points"], path_obj["path_s"], s_head)
+    return {
+        "times": times,
+        "s_head": s_head,
+        "head_xy": head_xy,
+        "total_time": (s1 - s0) / v_head,
+        "start_s_head": s0,
+        "end_s_head": s1,
+    }
+
+
 # ============================================================
 # 任务5：全体把手在复合路径上的位置递推与速度计算
 # ============================================================
@@ -2402,12 +2443,13 @@ def solve_problem4(
         ds=ds,
     )
 
-    print("问题4 - 任务4：生成龙头轨迹")
-    head_motion = build_head_motion_on_path(
-        path_points=path_obj["path_points"],
-        path_s=path_obj["path_s"],
+    print("问题4 - 任务4：生成调头窗口内的龙头轨迹")
+    head_motion = build_head_motion_on_turn_window(
+        path_obj=path_obj,
         v_head=v_head,
         dt=dt,
+        num_handles=num_handles,
+        margin=2.0,
     )
 
     print("问题4 - 任务5：全体把手位置递推与速度计算")
