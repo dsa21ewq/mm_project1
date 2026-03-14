@@ -17,6 +17,22 @@
 \usepackage{enumitem}
 \usepackage{hyperref}
 \usepackage{xcolor}
+\usepackage{pgfplots}
+\usepackage{pgfplotstable}
+\usepackage{listings}
+
+\pgfplotsset{compat=1.18}
+\lstset{
+    basicstyle=\ttfamily\small,
+    breaklines=true,
+    frame=single,
+    columns=fullflexible,
+    numbers=left,
+    numberstyle=\tiny,
+    keywordstyle=\color{blue},
+    commentstyle=\color{gray!70!black},
+    showstringspaces=false
+}
 
 \hypersetup{
     colorlinks=true,
@@ -391,6 +407,56 @@ v_n(t)\approx
 \end{enumerate}
 
 \noindent 这些结果可进一步整理为表格，并绘制龙头轨迹图、若干时刻队形图以及速度变化图，为后续问题二的碰撞分析提供基础数据支持。
+
+为便于直观展示，图~\ref{fig:p1_head_traj} 给出了龙头在全时域内的盘入轨迹；图~\ref{fig:p1_pos_compare} 对比了龙头与龙尾前把手在平面上的轨迹差异，体现了刚体链跟随造成的空间滞后特征。
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}
+\begin{axis}[
+    width=0.72\textwidth,
+    height=0.48\textwidth,
+    xlabel={$x$ / m}, ylabel={$y$ / m},
+    title={问题一：龙头前把手盘入轨迹},
+    grid=both, axis equal image
+]
+\addplot[
+    blue,
+    thick,
+    no marks,
+    mark repeat=100000
+]
+table[
+    col sep=comma,
+    x=x_0,
+    y=y_0,
+    each nth point={100}
+] {图片和数据/task1_head_trajectory_full.csv};
+\end{axis}
+\end{tikzpicture}
+\caption{问题一龙头前把手完整轨迹}
+\label{fig:p1_head_traj}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}
+\begin{axis}[
+    width=0.72\textwidth,
+    height=0.48\textwidth,
+    xlabel={$x$ / m}, ylabel={$y$ / m},
+    title={问题一：龙头与龙尾前把手轨迹对比},
+    grid=both, axis equal image,
+    legend pos=south west
+]
+\addplot[red,thick,no marks] table[col sep=comma,x=head_front_x,y=head_front_y] {图片和数据/task3_positions_1s.csv};
+\addplot[black,dashed,thick,no marks] table[col sep=comma,x=tail_front_x,y=tail_front_y] {图片和数据/task3_positions_1s.csv};
+\legend{龙头前把手,龙尾前把手}
+\end{axis}
+\end{tikzpicture}
+\caption{问题一关键把手轨迹对比}
+\label{fig:p1_pos_compare}
+\end{figure}
 \subsection{问题二：盘入过程中的碰撞判定}
 
 \subsubsection{问题理解}
@@ -818,6 +884,44 @@ d^\ast\approx d_R
 
 \noindent 这些结果能够说明在给定调头空间约束下，板凳龙盘入路径的极限紧凑程度，并为问题四中的调头路径设计提供关键参数依据。
 
+图~\ref{fig:p3_binary} 展示了二分搜索过程中螺距与最小安全距离之间的关系；表~\ref{tab:p3_coarse} 给出粗扫描阶段的部分样本，便于说明“先粗后细”的求解策略如何定位可行区间。
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}
+\begin{axis}[
+    width=0.78\textwidth,
+    height=0.42\textwidth,
+    xlabel={螺距 $d$ / m}, ylabel={最小安全距离 / m},
+    title={问题三：二分搜索样本},
+    grid=major
+]
+\addplot[purple,thick,mark=*] table[col sep=comma,x=pitch,y=min_clearance] {图片和数据/problem3_fast_binary_search_history.csv};
+\end{axis}
+\end{tikzpicture}
+\caption{问题三螺距-安全距离关系}
+\label{fig:p3_binary}
+\end{figure}
+
+\begin{table}[H]
+\centering
+\caption{问题三粗扫描结果（节选）}
+\label{tab:p3_coarse}
+\pgfplotstabletypeset[
+    col sep=comma,
+    columns={pitch,reachable,feasible,min_clearance,collision_time},
+    columns/pitch/.style={column name=螺距, fixed, precision=3},
+    columns/reachable/.style={column name=可达},
+    columns/feasible/.style={column name=可行},
+    columns/min_clearance/.style={column name=最小安全距离, fixed, precision=4},
+    columns/collision_time/.style={column name=首次碰撞时刻},
+    empty cells with={--},
+    every head row/.style={before row=\toprule,after row=\midrule},
+    every last row/.style={after row=\bottomrule},
+    string type
+]{图片和数据/problem3_fast_coarse_scan_simple.csv}
+\end{table}
+
 \subsection{问题四：调头路径设计与运动仿真}
 
 \subsubsection{问题理解}
@@ -1046,6 +1150,52 @@ v_n(t)\approx
 \end{enumerate}
 
 \noindent 这些结果能够说明在给定调头空间约束下，所设计路径是否能支持板凳龙顺利完成调头，并为后续问题五中的最大允许行进速度分析提供基础。
+
+问题四不仅需要路径图，还需要结合构型与速度进行联合解读。图~\ref{fig:p4_path} 给出了调头路径，图~\ref{fig:p4_configs} 展示起始、中间、结束三个关键构型，图~\ref{fig:p4_speed} 则给出调头阶段速度变化。
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}
+\begin{axis}[
+    width=0.72\textwidth,
+    height=0.48\textwidth,
+    xlabel={$x$ / m}, ylabel={$y$ / m},
+    title={问题四：调头路径点集},
+    grid=both, axis equal image
+]
+\addplot[orange!85!black,thick,no marks] table[col sep=comma,x=x,y=y] {图片和数据/problem4_fast_path_points.csv};
+\end{axis}
+\end{tikzpicture}
+\caption{问题四调头路径}
+\label{fig:p4_path}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \begin{subfigure}[b]{0.31\textwidth}
+        \includegraphics[width=\textwidth]{图片和数据/problem4_fast_config_start.png}
+        \caption{起始构型}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}[b]{0.31\textwidth}
+        \includegraphics[width=\textwidth]{图片和数据/problem4_fast_config_middle.png}
+        \caption{中间构型}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}[b]{0.31\textwidth}
+        \includegraphics[width=\textwidth]{图片和数据/problem4_fast_config_end.png}
+        \caption{结束构型}
+    \end{subfigure}
+    \caption{问题四关键时刻构型}
+    \label{fig:p4_configs}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.75\textwidth]{图片和数据/problem4_fast_speed_curve.png}
+\caption{问题四调头阶段速度曲线}
+\label{fig:p4_speed}
+\end{figure}
 
 \subsection{问题五：最大允许行进速度分析}
 
@@ -1285,6 +1435,47 @@ S=\frac{\Delta Y / Y}{\Delta X / X}.
 
 \noindent 这些结果能够说明在给定路径与安全速度约束下，板凳龙系统的速度极限及其形成机理，从而为整篇模型的工程解释和方案优化提供最终依据。
 
+针对速度瓶颈，图~\ref{fig:p5_speed_compare} 对比了龙头、龙尾和第30节把手的速度时程；表~\ref{tab:p4_metrics} 列出问题四输出的关键性能指标，可用于支持问题五关于速度上限的讨论。
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}
+\begin{axis}[
+    width=0.82\textwidth,
+    height=0.4\textwidth,
+    xlabel={$t$ / s}, ylabel={$v$ / (m/s)},
+    title={问题五：关键把手速度时程对比},
+    grid=major,
+    legend pos=south east
+]
+\addplot[red,thick,no marks] table[col sep=comma,x=t,y=head_front_v] {图片和数据/task4_velocities_1s.csv};
+\addplot[blue,dashed,thick,no marks] table[col sep=comma,x=t,y=tail_front_v] {图片和数据/task4_velocities_1s.csv};
+\addplot[green!60!black,dotted,thick,no marks] table[col sep=comma,x=t,y=handle_30_v] {图片和数据/task4_velocities_1s.csv};
+\legend{龙头前把手,龙尾前把手,第30节把手}
+\end{axis}
+\end{tikzpicture}
+\caption{问题五关键把手速度对比}
+\label{fig:p5_speed_compare}
+\end{figure}
+
+\begin{table}[H]
+\centering
+\caption{问题四/五关联指标（由仿真结果导出）}
+\label{tab:p4_metrics}
+\pgfplotstabletypeset[
+    col sep=comma,
+    columns={total_length,total_time,max_speed,max_speed_handle_index,min_clearance},
+    columns/total_length/.style={column name=路径总长度, fixed, precision=3},
+    columns/total_time/.style={column name=总时长, fixed, precision=3},
+    columns/max_speed/.style={column name=最大把手速度, fixed, precision=3},
+    columns/max_speed_handle_index/.style={column name=峰值把手编号},
+    columns/min_clearance/.style={column name=最小安全距离, fixed, precision=4},
+    every head row/.style={before row=\toprule,after row=\midrule},
+    every last row/.style={after row=\bottomrule},
+    string type
+]{图片和数据/problem4_fast_metrics_simple.csv}
+\end{table}
+
 % ==================== 6 数值实验与敏感性分析 ====================
 \section{数值实验与敏感性分析}
 
@@ -1361,6 +1552,21 @@ S=\frac{\Delta Y / Y}{\Delta X / X},
 本附录用于放置 Python / MATLAB / C++ 源代码结构说明、输入输出文件格式、运行环境与复现实验步骤。
 
 \section{附图与补充表格}
-本附录用于补充主要位置图、速度图、碰撞判定图、灵敏度分析图等。
+本附录补充代码结构与复现实现细节，重点给出核心算法片段，便于审稿与复现。
+
+\subsection{核心代码片段（problem1.py）}
+\paragraph{轨迹积分与把手递推}
+\lstinputlisting[language=Python,firstline=57,lastline=190,caption={\texttt{problem1.py} 中的问题一核心求解函数}] {problem1.py}
+
+\subsection{性能优化与统一配置（project\_refactor\_improved.py）}
+\paragraph{统一配置与快速根求解}
+\lstinputlisting[language=Python,firstline=53,lastline=220,caption={\texttt{project\_refactor\_improved.py} 中的配置与快速根求解实现}] {project_refactor_improved.py}
+
+\paragraph{调头路径输出图（补充）}
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.75\textwidth]{图片和数据/problem4_fast_path.png}
+\caption{问题四路径总览（程序原始输出图，作为补充）}
+\end{figure}
 
 \end{document}

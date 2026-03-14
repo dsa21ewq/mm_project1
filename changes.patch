@@ -1,0 +1,484 @@
+diff --git a/project.tex b/project.tex
+index 07403c209a166f42b459bd2c19d70e7cd98fa9f6..3f6a0706e28ed21c8f17a392293a8a8f573caafd 100644
+--- a/project.tex
++++ b/project.tex
+@@ -1,44 +1,60 @@
+ \documentclass[12pt,a4paper]{ctexart}
+ 
+ % ==================== 宏包 ====================
+ \usepackage[left=2.2cm,right=2.2cm,top=2.5cm,bottom=2.5cm]{geometry}
+ \usepackage{amsmath,amssymb,amsfonts}
+ \usepackage{bm}
+ \usepackage{mathrsfs}
+ \usepackage{graphicx}
+ \usepackage{float}
+ \usepackage{booktabs}
+ \usepackage{multirow}
+ \usepackage{array}
+ \usepackage{longtable}
+ \usepackage{tabularx}
+ \usepackage{caption}
+ \usepackage{subcaption}
+ \usepackage{enumitem}
+ \usepackage{hyperref}
+ \usepackage{xcolor}
++\usepackage{pgfplots}
++\usepackage{pgfplotstable}
++\usepackage{listings}
++
++\pgfplotsset{compat=1.18}
++\lstset{
++    basicstyle=\ttfamily\small,
++    breaklines=true,
++    frame=single,
++    columns=fullflexible,
++    numbers=left,
++    numberstyle=\tiny,
++    keywordstyle=\color{blue},
++    commentstyle=\color{gray!70!black},
++    showstringspaces=false
++}
+ 
+ \hypersetup{
+     colorlinks=true,
+     linkcolor=blue,
+     citecolor=blue,
+     urlcolor=blue
+ }
+ 
+ % ==================== 行距与段落 ====================
+ \linespread{1.25}
+ \setlength{\parindent}{2em}
+ \setlength{\parskip}{0.3em}
+ 
+ % ==================== 自定义命令 ====================
+ \newcommand{\dif}{\mathrm{d}}
+ \newcommand{\e}{\mathrm{e}}
+ \newcommand{\R}{\mathbb{R}}
+ \newcommand{\argmin}{\mathop{\mathrm{arg\,min}}}
+ \newcommand{\argmax}{\mathop{\mathrm{arg\,max}}}
+ 
+ % ==================== 标题信息 ====================
+ \title{\heiti 基于动态搜索的“板凳龙”运动状态及路线研究\\[0.5em]
+ \large —— 2025 CUMCM 一等奖论文复现报告模板}
+ \author{HU Bowen}
+ \date{\today}
+@@ -369,50 +385,90 @@ v_n(t)\approx
+     \item 利用相邻把手固定距离约束，逐节递推求出其余把手的极角；
+     \item 将各把手极坐标转换为直角坐标；
+     \item 通过差分法计算各把手速度；
+     \item 输出题目要求的关键时刻与关键位置结果。
+ \end{enumerate}
+ 
+ \subsubsection{问题一模型的特点}
+ 该模型以龙头轨迹为基础，通过刚体距离约束递推求出全队状态，结构清晰，便于程序实现。其优点在于：
+ \begin{itemize}
+     \item 几何意义明确，便于解释板凳龙的盘入机制；
+     \item 所有把手位置均由统一的递推关系得到，便于扩展；
+     \item 可直接与后续碰撞检测、最小螺距求解及调头路径分析衔接。
+ \end{itemize}
+ 
+ 但该模型也存在一定局限性：其一，假设板凳均为刚体，忽略连接处柔性形变；其二，速度采用离散差分近似，结果受时间步长影响。因此，在后续数值实验中需结合步长敏感性分析验证结果的稳定性。
+ 
+ \subsubsection{结果输出说明}
+ 在完成上述计算后，应整理得到以下结果：
+ \begin{enumerate}
+     \item 龙头前把手在 $0$--$300\,\mathrm{s}$ 内每秒的位置与速度；
+     \item 各节龙身前把手在 $0$--$300\,\mathrm{s}$ 内每秒的位置与速度；
+     \item 龙尾前把手、龙尾后把手在 $0$--$300\,\mathrm{s}$ 内每秒的位置与速度。
+ \end{enumerate}
+ 
+ \noindent 这些结果可进一步整理为表格，并绘制龙头轨迹图、若干时刻队形图以及速度变化图，为后续问题二的碰撞分析提供基础数据支持。
++
++
++为便于直观展示，图~\ref{fig:p1_head_traj} 给出了龙头在全时域内的盘入轨迹；图~\ref{fig:p1_pos_compare} 对比了龙头与龙尾前把手在平面上的轨迹差异，体现了刚体链跟随造成的空间滞后特征。
++
++\begin{figure}[H]
++\centering
++\begin{tikzpicture}
++\begin{axis}[
++    width=0.72\textwidth,
++    height=0.48\textwidth,
++    xlabel={$x$ / m}, ylabel={$y$ / m},
++    title={问题一：龙头前把手盘入轨迹},
++    grid=both, axis equal image
++]
++\addplot[blue,thick,no marks] table[col sep=comma,x=x_0,y=y_0] {图片和数据/task1_head_trajectory_full.csv};
++\end{axis}
++\end{tikzpicture}
++\caption{问题一龙头前把手完整轨迹}
++\label{fig:p1_head_traj}
++\end{figure}
++
++\begin{figure}[H]
++\centering
++\begin{tikzpicture}
++\begin{axis}[
++    width=0.72\textwidth,
++    height=0.48\textwidth,
++    xlabel={$x$ / m}, ylabel={$y$ / m},
++    title={问题一：龙头与龙尾前把手轨迹对比},
++    grid=both, axis equal image,
++    legend pos=south west
++]
++\addplot[red,thick,no marks] table[col sep=comma,x=head_front_x,y=head_front_y] {图片和数据/task3_positions_1s.csv};
++\addplot[black,dashed,thick,no marks] table[col sep=comma,x=tail_front_x,y=tail_front_y] {图片和数据/task3_positions_1s.csv};
++\legend{龙头前把手,龙尾前把手}
++\end{axis}
++\end{tikzpicture}
++\caption{问题一关键把手轨迹对比}
++\label{fig:p1_pos_compare}
++\end{figure}
+ \subsection{问题二：盘入过程中的碰撞判定}
+ 
+ \subsubsection{问题理解}
+ 问题二要求在问题一已求得板凳龙各把手位置与速度的基础上，进一步判断板凳龙在持续盘入过程中是否会发生自碰撞，并给出首次碰撞时刻及相应位置特征。与问题一相比，问题二的关键变化在于：不仅要考虑把手这一系列离散点的位置，还必须考虑每节板凳本体具有有限长度和宽度，因此需要建立板凳实体的几何表示，并设计合理的碰撞判定准则。
+ 
+ 从建模角度看，问题二的本质是一个\textbf{随时间变化的多刚体平面碰撞检测问题}。其核心步骤包括：
+ \begin{enumerate}
+     \item 根据把手位置恢复每节板凳的几何区域；
+     \item 对非相邻板凳进行空间相交或最小距离检测；
+     \item 在时间轴上搜索首次碰撞发生的时刻。
+ \end{enumerate}
+ 
+ \subsubsection{模型建立思路}
+ 问题二可分解为如下三个层次：
+ 
+ \begin{enumerate}
+     \item \textbf{几何层：}将每节板凳由“前后把手”抽象为一个具有固定长度和宽度的矩形区域；
+     \item \textbf{判定层：}给出任意两节板凳是否碰撞的数学准则；
+     \item \textbf{搜索层：}沿时间轴逐步检测，确定首次碰撞时刻。
+ \end{enumerate}
+ 
+ 因此，问题二的建模逻辑可概括为
+ \[
+ \text{把手位置} \longrightarrow \text{板凳矩形重建} \longrightarrow \text{两两碰撞检测} \longrightarrow \text{首次碰撞搜索}.
+ \]
+@@ -796,50 +852,88 @@ d^\ast\approx d_R
+ \end{itemize}
+ 
+ 但该模型也存在一定局限性：
+ 
+ \begin{itemize}
+     \item 可行性判定基于数值仿真，计算量较大；
+     \item 单调性虽具有较强几何直觉支持，但在离散步长和局部构型复杂时仍需通过实验验证；
+     \item 最优解精度依赖于螺距搜索步长、碰撞检测精度以及时间离散精度。
+ \end{itemize}
+ 
+ 因此，在数值实现中需要合理控制搜索精度和仿真步长，以保证结果的稳定性与可信度。
+ 
+ \subsubsection{结果输出说明}
+ 完成上述建模与求解后，应给出以下结果：
+ 
+ \begin{enumerate}
+     \item 最小可行螺距 $d^\ast$；
+     \item 对应的最小安全距离及其发生时刻；
+     \item 最小可行螺距附近若干螺距值下的可行性对比表；
+     \item “螺距—最小安全距离”或“螺距—首次碰撞时刻”关系图；
+     \item 若需要，可给出最优螺距下板凳龙进入调头空间时的平面形态图。
+ \end{enumerate}
+ 
+ \noindent 这些结果能够说明在给定调头空间约束下，板凳龙盘入路径的极限紧凑程度，并为问题四中的调头路径设计提供关键参数依据。
+ 
++
++图~\ref{fig:p3_binary} 展示了二分搜索过程中螺距与最小安全距离之间的关系；表~\ref{tab:p3_coarse} 给出粗扫描阶段的部分样本，便于说明“先粗后细”的求解策略如何定位可行区间。
++
++\begin{figure}[H]
++\centering
++\begin{tikzpicture}
++\begin{axis}[
++    width=0.78\textwidth,
++    height=0.42\textwidth,
++    xlabel={螺距 $d$ / m}, ylabel={最小安全距离 / m},
++    title={问题三：二分搜索样本},
++    grid=major
++]
++\addplot[purple,thick,mark=*] table[col sep=comma,x=pitch,y=min_clearance] {图片和数据/problem3_fast_binary_search_history.csv};
++\end{axis}
++\end{tikzpicture}
++\caption{问题三螺距-安全距离关系}
++\label{fig:p3_binary}
++\end{figure}
++
++\begin{table}[H]
++\centering
++\caption{问题三粗扫描结果（节选）}
++\label{tab:p3_coarse}
++\pgfplotstabletypeset[
++    col sep=comma,
++    columns={pitch,reachable,feasible,min_clearance,collision_time},
++    columns/pitch/.style={column name=螺距, fixed, precision=3},
++    columns/reachable/.style={column name=可达},
++    columns/feasible/.style={column name=可行},
++    columns/min_clearance/.style={column name=最小安全距离, fixed, precision=4},
++    columns/collision_time/.style={column name=首次碰撞时刻},
++    every head row/.style={before row=\toprule,after row=\midrule},
++    every last row/.style={after row=\bottomrule},
++    string type
++]{图片和数据/problem3_fast_coarse_scan.csv}
++\end{table}
++
+ \subsection{问题四：调头路径设计与运动仿真}
+ 
+ \subsubsection{问题理解}
+ 问题四要求在给定调头空间约束下，为板凳龙设计一条能够完成转向的连续路径，并在此基础上模拟整条板凳龙在调头阶段的运动状态。与前三问相比，本问的重点不再是单一盘入螺线上的运动，而是需要构造一条由盘入段、调头段和盘出段组成的复合路径，并保证整条路径几何上连续、运动上可实现、过程中不发生碰撞。
+ 
+ 从建模角度看，问题四本质上是一个\textbf{受限空间中的组合曲线路径设计与多刚体跟随运动问题}。其核心难点在于：一方面，调头路径必须位于给定调头空间内；另一方面，路径不能过于急剧，否则会导致后续板凳跟随时局部挤压、速度突变或碰撞风险增加。因此，需要在几何连续性、空间可行性与运动安全性之间进行综合平衡。
+ 
+ \subsubsection{模型建立思路}
+ 问题四可以分解为以下四个层次：
+ 
+ \begin{enumerate}
+     \item \textbf{路径层：}设计龙头前把手的调头复合路径；
+     \item \textbf{连续性层：}保证盘入段、调头段和盘出段之间位置连续，必要时切向连续；
+     \item \textbf{跟随层：}利用问题一中的固定把手间距递推模型，求解全队在复合路径上的位置与速度；
+     \item \textbf{安全性层：}利用问题二中的碰撞检测方法，验证调头路径下运动过程是否安全。
+ \end{enumerate}
+ 
+ 因此，问题四的建模逻辑可概括为
+ \[
+ \text{构造调头路径} \longrightarrow \text{保证几何连续} \longrightarrow \text{全队跟随仿真} \longrightarrow \text{碰撞与速度验证}.
+ \]
+ 
+ \subsubsection{调头路径的构造思想}
+ 设板凳龙的完整运动过程由三部分组成：
+ 
+@@ -1025,50 +1119,97 @@ v_n(t)\approx
+ \end{itemize}
+ 
+ 但该模型也存在一定局限性：
+ 
+ \begin{itemize}
+     \item 若调头段仅由少量圆弧构成，可能无法完全反映真实表演中的灵活转向过程；
+     \item 全队跟随位置通常依赖数值搜索，计算量较大；
+     \item 调头路径的优劣仍受参数选取影响，需要通过数值实验进一步验证。
+ \end{itemize}
+ 
+ 因此，在数值实现中，应适当比较不同调头路径参数下的运动效果，以提高方案的可信度。
+ 
+ \subsubsection{结果输出说明}
+ 完成上述建模与计算后，应给出以下结果：
+ 
+ \begin{enumerate}
+     \item 调头路径的几何参数，包括圆心、半径、连接点和总长度；
+     \item 龙头前把手在调头过程中的轨迹图；
+     \item 若干关键时刻下整条板凳龙的平面构型图；
+     \item 调头过程中全体把手的速度变化情况；
+     \item 调头路径的碰撞检测结果及最小安全距离。
+ \end{enumerate}
+ 
+ \noindent 这些结果能够说明在给定调头空间约束下，所设计路径是否能支持板凳龙顺利完成调头，并为后续问题五中的最大允许行进速度分析提供基础。
+ 
++
++问题四不仅需要路径图，还需要结合构型与速度进行联合解读。图~\ref{fig:p4_path} 给出了调头路径，图~\ref{fig:p4_configs} 展示起始、中间、结束三个关键构型，图~\ref{fig:p4_speed} 则给出调头阶段速度变化。
++
++\begin{figure}[H]
++\centering
++\begin{tikzpicture}
++\begin{axis}[
++    width=0.72\textwidth,
++    height=0.48\textwidth,
++    xlabel={$x$ / m}, ylabel={$y$ / m},
++    title={问题四：调头路径点集},
++    grid=both, axis equal image
++]
++\addplot[orange!85!black,thick,no marks] table[col sep=comma,x=x,y=y] {图片和数据/problem4_fast_path_points.csv};
++\end{axis}
++\end{tikzpicture}
++\caption{问题四调头路径}
++\label{fig:p4_path}
++\end{figure}
++
++\begin{figure}[H]
++    \centering
++    \begin{subfigure}[b]{0.31\textwidth}
++        \includegraphics[width=\textwidth]{图片和数据/problem4_fast_config_start.png}
++        \caption{起始构型}
++    \end{subfigure}
++    \hfill
++    \begin{subfigure}[b]{0.31\textwidth}
++        \includegraphics[width=\textwidth]{图片和数据/problem4_fast_config_middle.png}
++        \caption{中间构型}
++    \end{subfigure}
++    \hfill
++    \begin{subfigure}[b]{0.31\textwidth}
++        \includegraphics[width=\textwidth]{图片和数据/problem4_fast_config_end.png}
++        \caption{结束构型}
++    \end{subfigure}
++    \caption{问题四关键时刻构型}
++    \label{fig:p4_configs}
++\end{figure}
++
++\begin{figure}[H]
++\centering
++\includegraphics[width=0.75\textwidth]{图片和数据/problem4_fast_speed_curve.png}
++\caption{问题四调头阶段速度曲线}
++\label{fig:p4_speed}
++\end{figure}
++
+ \subsection{问题五：最大允许行进速度分析}
+ 
+ \subsubsection{问题理解}
+ 问题五要求在给定各板凳速度上限约束的条件下，确定龙头前把手允许的最大行进速度。与前四问相比，本问不再主要关注路径构造或碰撞判定，而是研究当龙头以不同速度运动时，整条板凳龙中各把手速度如何被放大，以及这种放大效应对系统整体运行安全性的限制。
+ 
+ 从建模角度看，问题五本质上是一个\textbf{带全局速度约束的参数优化问题}。龙头前把手作为主动驱动点，其速度会通过路径曲率变化与刚体链式约束传递到后续板凳。尤其在盘入、调头等曲率较大的区域，后续板凳的速度往往会出现局部放大现象。因此，需要找出在整条路径和整个运动过程中，使所有把手速度都不超过给定阈值的龙头最大允许速度。
+ 
+ \subsubsection{模型建立思路}
+ 问题五可以分解为以下三个层次：
+ 
+ \begin{enumerate}
+     \item \textbf{驱动层：}设定龙头前把手行进速度 $v_0$；
+     \item \textbf{响应层：}在已知路径和跟随模型下，计算整条板凳龙所有把手的速度分布；
+     \item \textbf{优化层：}在满足所有把手速度均不超过阈值的条件下，求解最大允许的 $v_0$。
+ \end{enumerate}
+ 
+ 因此，问题五的建模逻辑可概括为
+ \[
+ \text{给定龙头速度 } v_0 \longrightarrow \text{全队速度仿真} \longrightarrow \text{判定是否超速} \longrightarrow \max v_0.
+ \]
+ 
+ \subsubsection{速度约束的数学表述}
+ 设第 $n$ 个把手在时刻 $t$ 的速度为 $v_n(t)$，题目给定所有把手的速度上限为
+ \begin{equation}
+ v_{\mathrm{lim}}.
+@@ -1263,50 +1404,92 @@ S=\frac{\Delta Y / Y}{\Delta X / X}.
+ \end{itemize}
+ 
+ 但该模型也存在一定局限性：
+ 
+ \begin{itemize}
+     \item 速度结果依赖于路径离散精度和时间步长；
+     \item 若使用差分法近似速度，局部尖峰可能受步长影响；
+     \item 在复杂路径下，全队最大速度的变化虽通常具有单调性，但仍需数值验证。
+ \end{itemize}
+ 
+ 因此，在数值实现中需要合理控制时间步长，并对临界结果进行复核，以保证结论可靠。
+ 
+ \subsubsection{结果输出说明}
+ 完成上述建模与求解后，应给出以下结果：
+ 
+ \begin{enumerate}
+     \item 最大允许龙头行进速度 $v_0^\ast$；
+     \item 对应的全队最大把手速度及其发生时刻；
+     \item 达到速度峰值的把手编号及空间位置；
+     \item “龙头速度—全队最大速度”关系曲线；
+     \item 敏感性分析结果及关键速度曲线图。
+ \end{enumerate}
+ 
+ \noindent 这些结果能够说明在给定路径与安全速度约束下，板凳龙系统的速度极限及其形成机理，从而为整篇模型的工程解释和方案优化提供最终依据。
+ 
++
++针对速度瓶颈，图~\ref{fig:p5_speed_compare} 对比了龙头、龙尾和第30节把手的速度时程；表~\ref{tab:p4_metrics} 列出问题四输出的关键性能指标，可用于支持问题五关于速度上限的讨论。
++
++\begin{figure}[H]
++\centering
++\begin{tikzpicture}
++\begin{axis}[
++    width=0.82\textwidth,
++    height=0.4\textwidth,
++    xlabel={$t$ / s}, ylabel={$v$ / (m/s)},
++    title={问题五：关键把手速度时程对比},
++    grid=major,
++    legend pos=south east
++]
++\addplot[red,thick,no marks] table[col sep=comma,x=t,y=head_front_v] {图片和数据/task4_velocities_1s.csv};
++\addplot[blue,dashed,thick,no marks] table[col sep=comma,x=t,y=tail_front_v] {图片和数据/task4_velocities_1s.csv};
++\addplot[green!60!black,dotted,thick,no marks] table[col sep=comma,x=t,y=handle_30_v] {图片和数据/task4_velocities_1s.csv};
++\legend{龙头前把手,龙尾前把手,第30节把手}
++\end{axis}
++\end{tikzpicture}
++\caption{问题五关键把手速度对比}
++\label{fig:p5_speed_compare}
++\end{figure}
++
++\begin{table}[H]
++\centering
++\caption{问题四/五关联指标（由仿真结果导出）}
++\label{tab:p4_metrics}
++\pgfplotstabletypeset[
++    col sep=comma,
++    columns={total_length,total_time,max_speed,max_speed_handle_index,min_clearance},
++    columns/total_length/.style={column name=路径总长度, fixed, precision=3},
++    columns/total_time/.style={column name=总时长, fixed, precision=3},
++    columns/max_speed/.style={column name=最大把手速度, fixed, precision=3},
++    columns/max_speed_handle_index/.style={column name=峰值把手编号},
++    columns/min_clearance/.style={column name=最小安全距离, fixed, precision=4},
++    every head row/.style={before row=\toprule,after row=\midrule},
++    every last row/.style={after row=\bottomrule},
++    string type
++]{图片和数据/problem4_fast_metrics.csv}
++\end{table}
++
+ % ==================== 6 数值实验与敏感性分析 ====================
+ \section{数值实验与敏感性分析}
+ 
+ \subsection{数值实验设计}
+ 建议围绕以下参数开展实验：
+ \begin{itemize}[leftmargin=2em]
+     \item 螺距 $d$；
+     \item 板凳宽度 $w$；
+     \item 调头空间半径 $R$；
+     \item 龙头行进速度 $v$；
+     \item 时间步长 $\Delta t$。
+ \end{itemize}
+ 
+ \subsection{敏感性分析思路}
+ 重点考察：
+ \begin{enumerate}[leftmargin=2em]
+     \item 螺距变化对首次碰撞时刻的影响；
+     \item 调头空间半径变化对可行性的影响；
+     \item 龙头速度变化对最大板凳速度的放大效应；
+     \item 时间步长变化对数值结果稳定性的影响。
+ \end{enumerate}
+ 
+ 可将灵敏度定义为
+ \begin{equation}
+ S=\frac{\Delta Y / Y}{\Delta X / X},
+@@ -1339,28 +1522,44 @@ S=\frac{\Delta Y / Y}{\Delta X / X},
+     \item 论文结构整理与 LaTeX 模版搭建；
+     \item 问题重述、模型假设、符号说明的初稿生成；
+     \item 数学公式排版与文字润色建议。
+ \end{itemize}
+ 所有核心建模思路、公式推导、程序实现与结果核验均由作者独立完成，并对最终内容负责。
+ 
+ % ==================== 参考文献 ====================
+ \begin{thebibliography}{99}
+ \bibitem{ref1}
+ 原一等奖论文作者. 基于动态搜索的“板凳龙”运动状态及路线研究.
+ 
+ \bibitem{ref2}
+ 相关数学建模教材或竞赛论文集.
+ 
+ \bibitem{ref3}
+ 与阿基米德螺线、碰撞检测、数值搜索相关的参考文献.
+ \end{thebibliography}
+ 
+ % ==================== 附录 ====================
+ \appendix
+ 
+ \section{程序说明}
+ 本附录用于放置 Python / MATLAB / C++ 源代码结构说明、输入输出文件格式、运行环境与复现实验步骤。
+ 
+ \section{附图与补充表格}
+-本附录用于补充主要位置图、速度图、碰撞判定图、灵敏度分析图等。
++本附录补充代码结构与复现实现细节，重点给出核心算法片段，便于审稿与复现。
++
++\subsection{核心代码片段（problem1.py）}
++\paragraph{轨迹积分与把手递推}
++\lstinputlisting[language=Python,firstline=57,lastline=190,caption={\texttt{problem1.py} 中的问题一核心求解函数}] {problem1.py}
++
++\subsection{性能优化与统一配置（project\_refactor\_improved.py）}
++\paragraph{统一配置与快速根求解}
++\lstinputlisting[language=Python,firstline=53,lastline=220,caption={\texttt{project\_refactor\_improved.py} 中的配置与快速根求解实现}] {project_refactor_improved.py}
++
++\paragraph{调头路径输出图（补充）}
++\begin{figure}[H]
++\centering
++\includegraphics[width=0.75\textwidth]{图片和数据/problem4_fast_path.png}
++\caption{问题四路径总览（程序原始输出图，作为补充）}
++\end{figure}
++
+ 
+-\end{document}
+\ No newline at end of file
++\end{document}

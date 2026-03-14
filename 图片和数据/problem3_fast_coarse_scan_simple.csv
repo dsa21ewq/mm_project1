@@ -1,0 +1,14 @@
+pitch,reachable,feasible,min_clearance,collision_time
+0.2,True,False,0.0,0.0
+0.25,True,False,0.0,0.0
+0.30000000000000004,True,False,0.0,0.0
+0.35000000000000003,True,False,0.0,0.0
+0.4,True,True,0.034757789871482286,
+0.45000000000000007,True,True,0.08510152551687539,
+0.5,True,True,0.13543865654224727,
+0.55,False,False,,
+0.6000000000000001,False,False,,
+0.6500000000000001,False,False,,
+0.7000000000000002,False,False,,
+0.7500000000000002,False,False,,
+0.8,False,False,,
